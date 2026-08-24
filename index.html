@@ -318,9 +318,10 @@
   ];
 
   var LS_KEY = "gn-headset-run-v1";
-  /* shared state store for the hosted (non-artifact) page — everyone with the
-     page reads and writes this one bin, so all devices see the same counts */
-  var REMOTE = "https://extendsclass.com/api/json-storage/bin/dfdecee";
+  /* shared state store for the hosted (non-artifact) page — a Google Apps
+     Script web app; everyone with the page reads and writes this one store,
+     so all devices see the same counts */
+  var REMOTE = "https://script.google.com/macros/s/AKfycbwFJRRhog420WnNwQPHbU8c-MmXp9lKrM4BVh53XQBh5VYCPMTUUZrvU3FjxZ-zGbk-zg/exec";
   var POLL_MS = 15000;
   var artifactNS = null;
   var mode = "boot"; /* synced | saving | local | ro */
@@ -492,8 +493,16 @@
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
     if (STANDALONE){
       setChip("saving");
-      fetch(REMOTE, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(state)})
-        .then(function(r){ if (!r.ok) throw new Error("put " + r.status); setChip("synced"); })
+      /* no Content-Type header: keeps this a "simple" request (no CORS preflight),
+         which Apps Script web apps require */
+      fetch(REMOTE, {method:"POST", body: JSON.stringify(state)})
+        .then(function(r){ if (!r.ok) throw new Error("post " + r.status); return r.json(); })
+        .then(function(resp){
+          resp = normalize(resp);
+          /* the store replies with the winning state; adopt it if ours was stale */
+          if (resp.updated > state.updated){ state = resp; render(); }
+          setChip("synced");
+        })
         .catch(function(){ setChip("local"); }); /* kept locally; retried on next change or poll */
       return;
     }

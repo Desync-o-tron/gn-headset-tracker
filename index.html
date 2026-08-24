@@ -281,8 +281,10 @@
     overhead, and every &ldquo;to go&rdquo; figure carries the 10% failure buffer. A headset counts as
     complete when every part for it is printed &mdash; 4 siliconces, outer + inner frame, 2 sponges,
     4 snaps, 2 conductive + 2 PLA sliders, 1 stopper. Log failed prints with the <b>fail</b> button
-    so scrap shows up in the totals. Type any amount in the box and hit <b>add</b> (or Enter) to log
-    a batch; an empty box adds one typical plate &mdash; that's the greyed number.
+    so scrap shows up in the totals &mdash; <b>fail</b> also uses the typed amount (empty = 1).
+    Type any amount in the box and hit <b>add</b> (or Enter) to log a batch; an empty box adds one
+    typical plate &mdash; that's the greyed number. Counts are shared: everyone with the link sees
+    and updates the same numbers, refreshed about every 15 seconds.
   </footer>
 </div>
 
@@ -300,7 +302,7 @@
   var PARTS = [
     {id:"sil",      name:"Siliconce",           mat:"Overture 95A TPU",      matKey:"ov_tpu", qty:4, hrs:2.0,   g:18,    plate:4,  sup:false},
     {id:"outer",    name:"Outer frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:7.167, g:156.6, plate:1,  sup:true},
-    {id:"inner",    name:"Inner frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:6.0,   g:145.5, plate:1,  sup:true},
+    {id:"inner",    name:"Inner frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:6.0,   g:90,    plate:1,  sup:true},
     {id:"sponge",   name:"Dummy sponge",        mat:"Siraya TPU",            matKey:"siraya", qty:2, hrs:0.75,  g:5,     plate:2,  sup:false},
     {id:"snap",     name:"Snap",                mat:"Bambu PLA",             matKey:"bambu",  qty:4, hrs:0.183, g:2,     plate:4,  sup:false},
     {id:"slider_c", name:"Slider (conductive)", mat:"Protopasta conductive", matKey:"cond",   qty:2, hrs:0.367, g:5.4,   plate:12, sup:false},
@@ -316,29 +318,42 @@
   ];
 
   var LS_KEY = "gn-headset-run-v1";
-  var state = readState();
+  /* shared state store for the hosted (non-artifact) page — everyone with the
+     page reads and writes this one bin, so all devices see the same counts */
+  var REMOTE = "https://extendsclass.com/api/json-storage/bin/dfdecee";
+  var POLL_MS = 15000;
   var artifactNS = null;
   var mode = "boot"; /* synced | saving | local | ro */
   var saveTimer = null;
 
+  function normalize(s){
+    if (!s || typeof s !== "object") s = {};
+    s.v = 1;
+    s.updated = typeof s.updated === "number" ? s.updated : 0;
+    s.counts = s.counts || {};
+    s.scrap  = s.scrap  || {};
+    /* migrate pre-split slider counts (was one part, now conductive + PLA) */
+    ["counts","scrap"].forEach(function(k){
+      var o = s[k];
+      if (typeof o.slider === "number" && typeof o.slider_c !== "number"){
+        o.slider_c = Math.ceil(o.slider / 2);
+        o.slider_p = Math.floor(o.slider / 2);
+      }
+      delete o.slider;
+    });
+    PARTS.forEach(function(p){
+      if (typeof s.counts[p.id] !== "number") s.counts[p.id] = 0;
+      if (typeof s.scrap[p.id]  !== "number") s.scrap[p.id]  = 0;
+    });
+    return s;
+  }
+
   function readState(){
     var el = document.getElementById("app-state");
     try { return JSON.parse(el.textContent); }
-    catch(e){ return {v:1,updated:0,counts:{},scrap:{}}; }
+    catch(e){ return null; }
   }
-  /* migrate pre-split slider counts (was one part, now conductive + PLA) */
-  ["counts","scrap"].forEach(function(k){
-    var o = state[k] || {};
-    if (typeof o.slider === "number" && typeof o.slider_c !== "number"){
-      o.slider_c = Math.ceil(o.slider / 2);
-      o.slider_p = Math.floor(o.slider / 2);
-    }
-    delete o.slider;
-  });
-  PARTS.forEach(function(p){
-    if (typeof state.counts[p.id] !== "number") state.counts[p.id] = 0;
-    if (typeof state.scrap[p.id]  !== "number") state.scrap[p.id]  = 0;
-  });
+  var state = normalize(readState());
 
   /* ---------- derived ---------- */
   function headsetsDone(){
@@ -417,7 +432,7 @@
           '<button class="step" data-act="inc" data-id="' + p.id + '">+1</button>' +
           '<input class="amt" type="number" inputmode="numeric" step="1" data-amt-for="' + p.id + '" placeholder="' + p.plate + '" aria-label="Amount of ' + esc(p.name) + ' to add">' +
           '<button class="step" data-act="add" data-id="' + p.id + '" title="Add the typed amount (empty = ' + p.plate + ')">add</button>' +
-          '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log a failed print">fail</button>' +
+          '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log failed prints (uses the typed amount, empty = 1)">fail</button>' +
         '</div></div>';
     }).join("");
     document.getElementById("part-list").innerHTML = html;
@@ -449,9 +464,8 @@
     chip.className = "";
     if (m === "saving"){ chip.classList.add("saving"); chip.textContent = "Saving…"; }
     else if (m === "local"){
-      /* on a plain web host this is the normal mode, not a warning */
-      if (STANDALONE){ chip.textContent = "Saved in this browser"; }
-      else { chip.classList.add("local"); chip.textContent = "Saved on this device only"; }
+      chip.classList.add("local");
+      chip.textContent = STANDALONE ? "Offline — saved in this browser" : "Saved on this device only";
     }
     else if (m === "ro"){ chip.classList.add("ro"); chip.textContent = "View only"; document.body.classList.add("readonly"); }
     else { chip.textContent = "Synced"; }
@@ -470,12 +484,19 @@
 
   function scheduleSave(){
     clearTimeout(saveTimer);
-    saveTimer = setTimeout(save, 2000);
+    saveTimer = setTimeout(function(){ saveTimer = null; save(); }, 2000);
   }
 
   function save(){
     state.updated = Date.now();
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
+    if (STANDALONE){
+      setChip("saving");
+      fetch(REMOTE, {method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(state)})
+        .then(function(r){ if (!r.ok) throw new Error("put " + r.status); setChip("synced"); })
+        .catch(function(){ setChip("local"); }); /* kept locally; retried on next change or poll */
+      return;
+    }
     if (!artifactNS){ setChip("local"); return; }
     setChip("saving");
     fetch(location.href, {cache:"no-store"})
@@ -509,7 +530,12 @@
       state.counts[p.id] = Math.max(0, state.counts[p.id] + n);
     }
     else if (act === "dec") state.counts[p.id] = Math.max(0, state.counts[p.id] - 1);
-    else if (act === "fail") state.scrap[p.id]++;
+    else if (act === "fail"){
+      var finp = document.querySelector('input.amt[data-amt-for="' + p.id + '"]');
+      var nf = finp ? parseInt(finp.value, 10) : NaN;
+      if (isNaN(nf)) nf = 1; /* empty box = one failed print */
+      state.scrap[p.id] = Math.max(0, state.scrap[p.id] + nf);
+    }
     else if (act === "unfail") state.scrap[p.id] = Math.max(0, state.scrap[p.id] - 1);
     render();
     scheduleSave();
@@ -527,8 +553,19 @@
   function adoptLocalIfNewer(){
     try {
       var local = JSON.parse(localStorage.getItem(LS_KEY) || "null");
-      if (local && local.updated > (state.updated || 0)){ state = local; render(); }
+      if (local && local.updated > (state.updated || 0)){ state = normalize(local); render(); }
     } catch(e){}
+  }
+
+  function fetchRemote(initial){
+    return fetch(REMOTE, {cache:"no-store"})
+      .then(function(r){ if (!r.ok) throw new Error("get " + r.status); return r.json(); })
+      .then(function(remote){
+        remote = normalize(remote);
+        if (remote.updated > (state.updated || 0)){ state = remote; render(); }
+        else if ((state.updated || 0) > remote.updated){ scheduleSave(); } /* our copy is newer (e.g. edits made offline) — push it up */
+        if (mode !== "saving") setChip("synced");
+      });
   }
 
   render();
@@ -540,7 +577,11 @@
     });
   } else {
     adoptLocalIfNewer();
-    setChip("local");
+    fetchRemote(true).catch(function(){ setChip("local"); });
+    setInterval(function(){
+      if (saveTimer || mode === "saving") return; /* don't race an in-flight edit */
+      fetchRemote(false).catch(function(){ if (mode === "synced") setChip("local"); });
+    }, POLL_MS);
   }
 })();
 </script>

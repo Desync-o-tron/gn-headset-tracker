@@ -210,6 +210,21 @@
   input.amt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   body.readonly button.step,body.readonly input.amt{display:none}
 
+  /* per-size frame counters */
+  .p-ctl.sizes{gap:5px}
+  .size-cell{
+    display:flex;align-items:center;gap:2px;
+    background:var(--card2);border:1px solid var(--line);border-radius:8px;
+    padding:2px 3px 2px 7px;
+  }
+  .size-cell .sz{font-size:10px;font-weight:700;color:var(--ink-3);letter-spacing:.02em}
+  .size-cell .szc{font-size:12px;font-weight:600;min-width:28px;text-align:center}
+  .size-cell .szc.overc{color:var(--warn)}
+  .size-cell.full{border-color:color-mix(in srgb, var(--good) 45%, var(--line))}
+  button.step.sm{padding:4px 6px;font-size:12px;border-color:transparent;background:transparent}
+  button.step.sm:hover{background:var(--accent-soft);border-color:transparent}
+  .over-note{color:var(--warn)}
+
   /* ---------- filament ---------- */
   .fil-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
   .fil{
@@ -280,7 +295,10 @@
     Times and weights come from the Aug&nbsp;2026 build plan: frame weights include ~50% support/raft
     overhead, and every &ldquo;to go&rdquo; figure carries the 10% failure buffer. A headset counts as
     complete when every part for it is printed &mdash; 4 siliconces, outer + inner frame, 2 sponges,
-    4 snaps, 2 conductive + 2 PLA sliders, 1 stopper. Log failed prints with the <b>fail</b> button
+    4 snaps, 2 conductive + 2 PLA sliders, 1 stopper. Frames print in five scales
+    (94&ndash;106%) targeting 2&nbsp;/&nbsp;7&nbsp;/&nbsp;12&nbsp;/&nbsp;7&nbsp;/&nbsp;2 of the 30 units;
+    a headset needs an outer and inner at the <em>same</em> scale, and prints beyond a
+    size's target don't advance the bar. Log failed prints with the <b>fail</b> button
     so scrap shows up in the totals &mdash; <b>fail</b> also uses the typed amount (empty = 1).
     Type any amount in the box and hit <b>add</b> (or Enter) to log a batch; an empty box adds one
     typical plate &mdash; that's the greyed number. Counts are shared: everyone with the link sees
@@ -299,10 +317,19 @@
   var BUFFER = 1.1;
   var FLEET_H_PER_DAY = 80; /* 5 printers x 16 h */
 
+  /* frame scales: a normal-ish spread of head sizes across the 30 units */
+  var SIZES = [
+    {key:"94",  pct:"94",  target:2},
+    {key:"96",  pct:"96",  target:7},
+    {key:"100", pct:"100", target:12},
+    {key:"104", pct:"104", target:7},
+    {key:"106", pct:"106", target:2}
+  ];
+
   var PARTS = [
     {id:"sil",      name:"Siliconce",           mat:"Overture 95A TPU",      matKey:"ov_tpu", qty:4, hrs:2.0,   g:18,    plate:4,  sup:false},
-    {id:"outer",    name:"Outer frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:7.167, g:156.6, plate:1,  sup:true},
-    {id:"inner",    name:"Inner frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:6.0,   g:90,    plate:1,  sup:true},
+    {id:"outer",    name:"Outer frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:7.167, g:156.6, plate:1,  sup:true, sized:true},
+    {id:"inner",    name:"Inner frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:6.0,   g:90,    plate:1,  sup:true, sized:true},
     {id:"sponge",   name:"Dummy sponge",        mat:"Siraya TPU",            matKey:"siraya", qty:2, hrs:0.75,  g:5,     plate:2,  sup:false},
     {id:"snap",     name:"Snap",                mat:"Bambu PLA",             matKey:"bambu",  qty:4, hrs:0.183, g:2,     plate:4,  sup:false},
     {id:"slider_c", name:"Slider (conductive)", mat:"Protopasta conductive", matKey:"cond",   qty:2, hrs:0.367, g:5.4,   plate:12, sup:false},
@@ -343,10 +370,51 @@
       delete o.slider;
     });
     PARTS.forEach(function(p){
-      if (typeof s.counts[p.id] !== "number") s.counts[p.id] = 0;
-      if (typeof s.scrap[p.id]  !== "number") s.scrap[p.id]  = 0;
+      if (p.sized){
+        SIZES.forEach(function(sz){
+          var k = p.id + "_" + sz.key;
+          if (typeof s.counts[k] !== "number") s.counts[k] = 0;
+        });
+        /* migrate pre-sizes frame counts into the 100% bucket */
+        if (typeof s.counts[p.id] === "number"){
+          s.counts[p.id + "_100"] += s.counts[p.id];
+          delete s.counts[p.id];
+        }
+      } else if (typeof s.counts[p.id] !== "number"){
+        s.counts[p.id] = 0;
+      }
+      if (typeof s.scrap[p.id] !== "number") s.scrap[p.id] = 0;
     });
     return s;
+  }
+
+  /* ---------- sized-part helpers ---------- */
+  function sizeCount(p, sz){ return state.counts[p.id + "_" + sz.key]; }
+  /* pieces that count toward the run: overprinting one size doesn't cover another */
+  function cappedUnits(p){
+    return SIZES.reduce(function(a, sz){ return a + Math.min(sizeCount(p, sz), sz.target); }, 0);
+  }
+  function rawCount(p){
+    return SIZES.reduce(function(a, sz){ return a + sizeCount(p, sz); }, 0);
+  }
+  function sizedRemaining(p){
+    return SIZES.reduce(function(a, sz){ return a + Math.max(0, sz.target - sizeCount(p, sz)); }, 0);
+  }
+  /* complete frame sets: an outer and inner at the SAME scale, up to that scale's target */
+  function pairsAvail(){
+    var outer = PARTS.find(function(p){ return p.id === "outer"; });
+    var inner = PARTS.find(function(p){ return p.id === "inner"; });
+    return SIZES.reduce(function(a, sz){
+      return a + Math.min(sizeCount(outer, sz), sizeCount(inner, sz), sz.target);
+    }, 0);
+  }
+  function partCount(p){ return p.sized ? rawCount(p) : state.counts[p.id]; }
+  function unitsFor(p){ return p.sized ? cappedUnits(p) : Math.floor(state.counts[p.id] / p.qty); }
+  function totalPieces(s){
+    var t = 0, k;
+    for (k in s.counts) if (typeof s.counts[k] === "number") t += s.counts[k];
+    for (k in s.scrap)  if (typeof s.scrap[k]  === "number") t += s.scrap[k];
+    return t;
   }
 
   function readState(){
@@ -357,21 +425,30 @@
   var state = normalize(readState());
 
   /* ---------- derived ---------- */
+  function gateValues(){
+    /* per-gate units toward complete headsets: matched frame pairs count as
+       one gate, every other part as its own */
+    var gates = [pairsAvail()];
+    PARTS.forEach(function(p){
+      if (!p.sized) gates.push(state.counts[p.id] / p.qty);
+    });
+    return gates;
+  }
   function headsetsDone(){
-    return Math.min.apply(null, PARTS.map(function(p){
-      return Math.floor(state.counts[p.id] / p.qty);
-    }).concat([GOAL]));
+    return Math.min.apply(null, gateValues().map(Math.floor).concat([GOAL]));
   }
   function nextUnitFrac(done){
     if (done >= GOAL) return 0;
-    return Math.min.apply(null, PARTS.map(function(p){
-      var f = state.counts[p.id] / p.qty - done;
-      return Math.max(0, Math.min(1, f));
+    return Math.min.apply(null, gateValues().map(function(g){
+      return Math.max(0, Math.min(1, g - done));
     }));
+  }
+  function remainingPieces(p){
+    return p.sized ? sizedRemaining(p) : Math.max(0, p.qty * GOAL - state.counts[p.id]);
   }
   function hoursToGo(){
     return PARTS.reduce(function(s,p){
-      return s + Math.max(0, p.qty * GOAL - state.counts[p.id]) * p.hrs * BUFFER;
+      return s + remainingPieces(p) * p.hrs * BUFFER;
     }, 0);
   }
 
@@ -382,7 +459,7 @@
   function render(){
     var done = headsetsDone();
     var frac = nextUnitFrac(done);
-    var pieces = PARTS.reduce(function(s,p){ return s + state.counts[p.id]; }, 0);
+    var pieces = PARTS.reduce(function(s,p){ return s + partCount(p); }, 0);
     var scrapTotal = PARTS.reduce(function(s,p){ return s + state.scrap[p.id]; }, 0);
     var hrs = hoursToGo();
 
@@ -409,32 +486,56 @@
       "~" + fmtH(PARTS.reduce(function(s,p){ return s + state.scrap[p.id]*p.hrs; },0)) + " lost to failures";
 
     /* parts */
-    var minRatio = Math.min.apply(null, PARTS.map(function(p){ return Math.floor(state.counts[p.id]/p.qty); }));
+    var minRatio = Math.min.apply(null, PARTS.map(unitsFor));
     var html = PARTS.map(function(p){
       var total = p.qty * GOAL;
-      var c = state.counts[p.id];
-      var pct = Math.min(100, c/total*100);
-      var isDone = c >= total;
-      var isBn = !isDone && pieces > 0 && Math.floor(c/p.qty) === minRatio && minRatio < GOAL;
-      var remH = Math.max(0, total - c) * p.hrs * BUFFER;
+      var c, pct, isDone, remH;
+      if (p.sized){
+        c = cappedUnits(p);
+        isDone = sizedRemaining(p) === 0;
+        pct = Math.min(100, c / GOAL * 100);
+        remH = sizedRemaining(p) * p.hrs * BUFFER;
+      } else {
+        c = state.counts[p.id];
+        isDone = c >= total;
+        pct = Math.min(100, c / total * 100);
+        remH = Math.max(0, total - c) * p.hrs * BUFFER;
+      }
+      var isBn = !isDone && pieces > 0 && unitsFor(p) === minRatio && minRatio < GOAL;
       var chip = isDone ? '<span class="chip complete">done</span>'
                : isBn   ? '<span class="chip bottleneck">bottleneck</span>' : "";
       var scrap = state.scrap[p.id] > 0
         ? state.scrap[p.id] + ' scrapped <button class="step fail" data-act="unfail" data-id="' + p.id + '" aria-label="Remove a logged failure for ' + esc(p.name) + '">&minus;</button>'
         : "";
+      var over = p.sized ? rawCount(p) - cappedUnits(p) : 0;
+      var overNote = over > 0 ? '<span class="over-note">' + over + ' over target</span> ' : "";
       var gLabel = p.g + " g" + (p.sup ? " w/ supports" : "");
-      return '<div class="part' + (isDone ? " done" : "") + '">' +
-        '<div class="p-id"><div class="name">' + esc(p.name) + chip + '</div><div class="mat">' + esc(p.mat) + ' · ' + p.qty + '/headset · ' + gLabel + '</div></div>' +
-        '<div class="p-bar"><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
-          '<div class="meta"><span>' + Math.round(pct) + '%</span><span class="num">' + (isDone ? "batch complete" : fmtH(remH) + " to go") + '</span></div></div>' +
-        '<div class="p-count"><div class="c">' + c + '<span class="den">/' + total + '</span></div><div class="scrap num">' + scrap + '</div></div>' +
-        '<div class="p-ctl">' +
+      var ctl;
+      if (p.sized){
+        ctl = SIZES.map(function(sz){
+          var sc = sizeCount(p, sz);
+          return '<div class="size-cell' + (sc >= sz.target ? " full" : "") + '">' +
+            '<span class="sz">' + sz.pct + '</span>' +
+            '<button class="step sm minus" data-act="dec" data-id="' + p.id + '" data-size="' + sz.key + '" aria-label="Remove one ' + sz.pct + '% ' + esc(p.name) + '"' + (sc===0?" disabled":"") + '>&minus;</button>' +
+            '<span class="num szc' + (sc > sz.target ? " overc" : "") + '">' + sc + '/' + sz.target + '</span>' +
+            '<button class="step sm" data-act="inc" data-id="' + p.id + '" data-size="' + sz.key + '" aria-label="Add one ' + sz.pct + '% ' + esc(p.name) + '">+</button>' +
+          '</div>';
+        }).join("") +
+        '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log a failed print (any size)">fail</button>';
+      } else {
+        ctl =
           '<button class="step minus" data-act="dec" data-id="' + p.id + '" aria-label="Remove one ' + esc(p.name) + '"' + (c===0?" disabled":"") + '>&minus;1</button>' +
           '<button class="step" data-act="inc" data-id="' + p.id + '">+1</button>' +
           '<input class="amt" type="number" inputmode="numeric" step="1" data-amt-for="' + p.id + '" placeholder="' + p.plate + '" aria-label="Amount of ' + esc(p.name) + ' to add">' +
           '<button class="step" data-act="add" data-id="' + p.id + '" title="Add the typed amount (empty = ' + p.plate + ')">add</button>' +
-          '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log failed prints (uses the typed amount, empty = 1)">fail</button>' +
-        '</div></div>';
+          '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log failed prints (uses the typed amount, empty = 1)">fail</button>';
+      }
+      return '<div class="part' + (isDone ? " done" : "") + (p.sized ? " sized" : "") + '">' +
+        '<div class="p-id"><div class="name">' + esc(p.name) + chip + '</div><div class="mat">' + esc(p.mat) + ' · ' + p.qty + '/headset · ' + gLabel + '</div></div>' +
+        '<div class="p-bar"><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="meta"><span>' + Math.round(pct) + '%</span><span class="num">' + (isDone ? "batch complete" : fmtH(remH) + " to go") + '</span></div></div>' +
+        '<div class="p-count"><div class="c">' + c + '<span class="den">/' + total + '</span></div><div class="scrap num">' + overNote + scrap + '</div></div>' +
+        '<div class="p-ctl' + (p.sized ? " sizes" : "") + '">' + ctl + '</div></div>';
     }).join("");
     document.getElementById("part-list").innerHTML = html;
 
@@ -442,7 +543,7 @@
     var need0 = {}, needNow = {};
     PARTS.forEach(function(p){
       var t0 = p.qty * GOAL * p.g * BUFFER / 1000;
-      var tn = Math.max(0, p.qty * GOAL - state.counts[p.id]) * p.g * BUFFER / 1000;
+      var tn = remainingPieces(p) * p.g * BUFFER / 1000;
       need0[p.matKey]   = (need0[p.matKey]   || 0) + t0;
       needNow[p.matKey] = (needNow[p.matKey] || 0) + tn;
     });
@@ -531,14 +632,15 @@
     var p = PARTS.find(function(x){ return x.id === btn.dataset.id; });
     if (!p) return;
     var act = btn.dataset.act;
-    if (act === "inc") state.counts[p.id]++;
+    var key = btn.dataset.size ? p.id + "_" + btn.dataset.size : p.id;
+    if (act === "inc") state.counts[key]++;
     else if (act === "add"){
       var inp = document.querySelector('input.amt[data-amt-for="' + p.id + '"]');
       var n = inp ? parseInt(inp.value, 10) : NaN;
       if (isNaN(n)) n = p.plate; /* empty box = one typical plate */
       state.counts[p.id] = Math.max(0, state.counts[p.id] + n);
     }
-    else if (act === "dec") state.counts[p.id] = Math.max(0, state.counts[p.id] - 1);
+    else if (act === "dec") state.counts[key] = Math.max(0, state.counts[key] - 1);
     else if (act === "fail"){
       var finp = document.querySelector('input.amt[data-amt-for="' + p.id + '"]');
       var nf = finp ? parseInt(finp.value, 10) : NaN;
@@ -571,8 +673,18 @@
       .then(function(r){ if (!r.ok) throw new Error("get " + r.status); return r.json(); })
       .then(function(remote){
         remote = normalize(remote);
-        if (remote.updated > (state.updated || 0)){ state = remote; render(); }
-        else if ((state.updated || 0) > remote.updated){ scheduleSave(); } /* our copy is newer (e.g. edits made offline) — push it up */
+        if (remote.updated > (state.updated || 0)){
+          /* never let an empty state silently bury real logged progress,
+             whichever side the timestamps favor */
+          if (totalPieces(remote) === 0 && totalPieces(state) > 0){ scheduleSave(); }
+          else { state = remote; render(); }
+        }
+        else if ((state.updated || 0) > remote.updated){
+          /* our copy is newer (e.g. edits made offline) — push it up, unless
+             ours is empty and the store has real data */
+          if (!(totalPieces(state) === 0 && totalPieces(remote) > 0)) scheduleSave();
+          else { state = remote; render(); }
+        }
         if (mode !== "saving") setChip("synced");
       });
   }

@@ -225,6 +225,27 @@
   button.step.sm:hover{background:var(--accent-soft);border-color:transparent}
   .over-note{color:var(--warn)}
 
+  /* ---------- headset sizes ---------- */
+  .size-list{display:flex;flex-direction:column;gap:6px}
+  .size-row{
+    display:grid;grid-template-columns:58px 1fr minmax(150px,auto) minmax(88px,auto);
+    gap:8px 16px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:9px 14px;box-shadow:var(--shadow);
+  }
+  .size-row.done{border-color:color-mix(in srgb, var(--good) 45%, var(--line))}
+  .size-row .pctl{font-family:"Spline Sans Mono",monospace;font-weight:700;font-size:15px;font-variant-numeric:tabular-nums}
+  .size-row .bar{height:6px}
+  .size-row.done .bar .fill{background:var(--good)}
+  .size-row .frames{font-size:11.5px;color:var(--ink-2);text-align:right;white-space:nowrap}
+  .size-row .sets{font-family:"Spline Sans Mono",monospace;font-weight:600;font-size:14px;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .size-row .sets .den{color:var(--ink-3);font-size:12px;font-weight:500}
+  @media (max-width:760px){
+    .size-row{grid-template-columns:44px 1fr auto;grid-template-areas:"p bar sets" "f f f"}
+    .size-row .pctl{grid-area:p}.size-row .bar{grid-area:bar}
+    .size-row .sets{grid-area:sets}.size-row .frames{grid-area:f;text-align:left}
+  }
+
   /* ---------- filament ---------- */
   .fil-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
   .fil{
@@ -281,6 +302,11 @@
     <div class="tile"><div class="k">Scrapped prints</div><div class="v" id="t-scrap">0</div><div class="s" id="t-scrap-s">no failures logged</div></div>
   </section>
 
+  <section aria-label="Headset sizes">
+    <h2>Headset sizes</h2>
+    <div class="size-list" id="size-list"></div>
+  </section>
+
   <section aria-label="Parts">
     <h2>Parts</h2>
     <div class="part-list" id="part-list"></div>
@@ -296,7 +322,7 @@
     overhead, and every &ldquo;to go&rdquo; figure carries the 10% failure buffer. A headset counts as
     complete when every part for it is printed &mdash; 4 siliconces, outer + inner frame, 2 sponges,
     4 snaps, 2 conductive + 2 PLA sliders, 1 stopper. Frames print in five scales
-    (94&ndash;106%) targeting 2&nbsp;/&nbsp;7&nbsp;/&nbsp;12&nbsp;/&nbsp;7&nbsp;/&nbsp;2 of the 30 units;
+    (93&ndash;107%) targeting 2&nbsp;/&nbsp;7&nbsp;/&nbsp;12&nbsp;/&nbsp;7&nbsp;/&nbsp;2 of the 30 units;
     a headset needs an outer and inner at the <em>same</em> scale, and prints beyond a
     size's target don't advance the bar. Log failed prints with the <b>fail</b> button
     so scrap shows up in the totals &mdash; <b>fail</b> also uses the typed amount (empty = 1).
@@ -319,12 +345,14 @@
 
   /* frame scales: a normal-ish spread of head sizes across the 30 units */
   var SIZES = [
-    {key:"94",  pct:"94",  target:2},
+    {key:"93",  pct:"93",  target:2},
     {key:"96",  pct:"96",  target:7},
     {key:"100", pct:"100", target:12},
     {key:"104", pct:"104", target:7},
-    {key:"106", pct:"106", target:2}
+    {key:"107", pct:"107", target:2}
   ];
+  /* legacy state-key scales renamed 2026-08-24 */
+  var SIZE_RENAMES = {"94":"93","106":"107"};
 
   var PARTS = [
     {id:"sil",      name:"Siliconce",           mat:"Overture 95A TPU",      matKey:"ov_tpu", qty:4, hrs:2.0,   g:18,    plate:4,  sup:false},
@@ -374,6 +402,14 @@
         SIZES.forEach(function(sz){
           var k = p.id + "_" + sz.key;
           if (typeof s.counts[k] !== "number") s.counts[k] = 0;
+        });
+        /* migrate renamed scales (94→93, 106→107) */
+        Object.keys(SIZE_RENAMES).forEach(function(oldKey){
+          var ok = p.id + "_" + oldKey, nk = p.id + "_" + SIZE_RENAMES[oldKey];
+          if (typeof s.counts[ok] === "number"){
+            s.counts[nk] += s.counts[ok];
+            delete s.counts[ok];
+          }
         });
         /* migrate pre-sizes frame counts into the 100% bucket */
         if (typeof s.counts[p.id] === "number"){
@@ -538,6 +574,22 @@
         '<div class="p-ctl' + (p.sized ? " sizes" : "") + '">' + ctl + '</div></div>';
     }).join("");
     document.getElementById("part-list").innerHTML = html;
+
+    /* headset sizes: complete frame sets (outer + inner at the same scale) */
+    var outerP = PARTS.find(function(p){ return p.id === "outer"; });
+    var innerP = PARTS.find(function(p){ return p.id === "inner"; });
+    document.getElementById("size-list").innerHTML = SIZES.map(function(sz){
+      var o = sizeCount(outerP, sz), n = sizeCount(innerP, sz);
+      var sets = Math.min(o, n, sz.target);
+      var szDone = sets >= sz.target;
+      var pctS = Math.min(100, sets / sz.target * 100);
+      return '<div class="size-row' + (szDone ? " done" : "") + '">' +
+        '<span class="pctl">' + sz.pct + '%</span>' +
+        '<div class="bar"><div class="fill" style="width:' + pctS + '%"></div></div>' +
+        '<span class="frames num">outer ' + o + '/' + sz.target + ' · inner ' + n + '/' + sz.target + '</span>' +
+        '<span class="sets">' + sets + '<span class="den">/' + sz.target + ' sets</span></span>' +
+      '</div>';
+    }).join("");
 
     /* filament */
     var need0 = {}, needNow = {};

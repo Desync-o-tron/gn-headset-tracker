@@ -1,0 +1,548 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
+<title>GN Headset Run</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Public+Sans:wght@400;500;600;700&family=Spline+Sans+Mono:wght@500;600;700&display=swap">
+<style>
+  :root{
+    --bg:#131020;
+    --card:#1d1930;
+    --card2:#241f3a;
+    --line:#332c52;
+    --ink:#efecfa;
+    --ink-2:#9c95b8;
+    --ink-3:#6f6890;
+    --accent:#9b7bff;
+    --accent-soft:rgba(155,123,255,.16);
+    --accent-ink:#c9b6ff;
+    --good:#4ec58c;
+    --good-soft:rgba(78,197,140,.14);
+    --warn:#e3a64a;
+    --warn-soft:rgba(227,166,74,.14);
+    --track:#2b2545;
+    --shadow:0 1px 0 rgba(0,0,0,.25);
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#f4f2fa;
+      --card:#ffffff;
+      --card2:#f7f5fd;
+      --line:#e0dbee;
+      --ink:#221d38;
+      --ink-2:#5d5678;
+      --ink-3:#8b84a8;
+      --accent:#6c48d6;
+      --accent-soft:rgba(108,72,214,.10);
+      --accent-ink:#5a38c2;
+      --good:#1e8a5b;
+      --good-soft:rgba(30,138,91,.10);
+      --warn:#a4700f;
+      --warn-soft:rgba(164,112,15,.10);
+      --track:#e9e5f5;
+      --shadow:0 1px 2px rgba(34,29,56,.06);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f2fa;
+    --card:#ffffff;
+    --card2:#f7f5fd;
+    --line:#e0dbee;
+    --ink:#221d38;
+    --ink-2:#5d5678;
+    --ink-3:#8b84a8;
+    --accent:#6c48d6;
+    --accent-soft:rgba(108,72,214,.10);
+    --accent-ink:#5a38c2;
+    --good:#1e8a5b;
+    --good-soft:rgba(30,138,91,.10);
+    --warn:#a4700f;
+    --warn-soft:rgba(164,112,15,.10);
+    --track:#e9e5f5;
+    --shadow:0 1px 2px rgba(34,29,56,.06);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    font-size:15px;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  .num{font-family:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;font-variant-numeric:tabular-nums}
+
+  .wrap{max-width:1020px;margin:0 auto;padding:28px 20px 64px}
+
+  /* ---------- header ---------- */
+  header.top{
+    display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+    padding-bottom:18px;margin-bottom:22px;border-bottom:1px solid var(--line);
+    flex-wrap:wrap;
+  }
+  .brand h1{
+    font-family:"Bricolage Grotesque","Public Sans",sans-serif;
+    font-weight:800;font-size:clamp(22px,3.4vw,30px);letter-spacing:-.01em;
+    margin:0;line-height:1.1;text-wrap:balance;
+  }
+  .brand .sub{margin:2px 0 0;color:var(--ink-2);font-size:13.5px}
+  #save-chip{
+    font-size:12px;font-weight:600;letter-spacing:.04em;
+    padding:4px 11px;border-radius:999px;white-space:nowrap;
+    background:var(--good-soft);color:var(--good);
+    border:1px solid transparent;transition:background .2s,color .2s;
+  }
+  #save-chip.saving{background:var(--accent-soft);color:var(--accent-ink)}
+  #save-chip.local,#save-chip.ro{background:var(--warn-soft);color:var(--warn)}
+
+  /* ---------- hero ---------- */
+  .hero{
+    display:grid;grid-template-columns:auto 1fr;gap:32px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:26px 30px;box-shadow:var(--shadow);margin-bottom:16px;
+  }
+  .hero-count{display:flex;flex-direction:column;gap:2px;min-width:190px}
+  .hero-count .big{
+    font-family:"Spline Sans Mono",monospace;font-weight:700;
+    font-size:clamp(52px,8vw,76px);line-height:1;letter-spacing:-.03em;
+    font-variant-numeric:tabular-nums;
+  }
+  .hero-count .big .den{color:var(--ink-3);font-size:.48em;font-weight:600}
+  .hero-count .label{
+    font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-2);
+  }
+  .hero-count .pace{font-size:13px;color:var(--ink-2);margin-top:6px}
+  .unit-grid{
+    display:grid;grid-template-columns:repeat(10,1fr);gap:7px;
+    max-width:460px;justify-self:end;width:100%;
+  }
+  .unit{
+    aspect-ratio:1;border-radius:6px;background:var(--track);
+    position:relative;overflow:hidden;
+  }
+  .unit .fill{
+    position:absolute;left:0;right:0;bottom:0;height:0%;
+    background:linear-gradient(160deg,var(--accent-ink),var(--accent));
+    transition:height .35s ease;
+  }
+  .unit.done .fill{height:100%}
+  .unit.done::after{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 26% 30%, rgba(255,255,255,.55) 0 1px, transparent 1.6px),
+      radial-gradient(circle at 68% 62%, rgba(255,255,255,.4) 0 1px, transparent 1.5px),
+      radial-gradient(circle at 44% 78%, rgba(255,255,255,.3) 0 .8px, transparent 1.3px);
+  }
+
+  /* ---------- stat tiles ---------- */
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:26px}
+  .tile{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:14px 16px 12px;box-shadow:var(--shadow);
+  }
+  .tile .k{
+    font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:4px;
+  }
+  .tile .v{font-family:"Spline Sans Mono",monospace;font-weight:600;font-size:24px;line-height:1.15;font-variant-numeric:tabular-nums}
+  .tile .v small{font-size:14px;color:var(--ink-3);font-weight:500}
+  .tile .s{font-size:12px;color:var(--ink-2);margin-top:3px}
+
+  /* ---------- sections ---------- */
+  h2{
+    font-family:"Bricolage Grotesque","Public Sans",sans-serif;
+    font-size:17px;font-weight:700;letter-spacing:.01em;margin:0 0 10px;
+  }
+  section{margin-bottom:28px}
+
+  /* ---------- parts ---------- */
+  .part-list{display:flex;flex-direction:column;gap:8px}
+  .part{
+    display:grid;
+    grid-template-columns:minmax(180px,230px) 1fr minmax(96px,auto) auto;
+    gap:10px 18px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:12px 16px;box-shadow:var(--shadow);
+  }
+  .part.done{border-color:color-mix(in srgb, var(--good) 45%, var(--line))}
+  .p-id .name{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:8px}
+  .p-id .mat{font-size:12px;color:var(--ink-2);margin-top:1px}
+  .chip{
+    font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 7px;border-radius:999px;white-space:nowrap;
+  }
+  .chip.bottleneck{background:var(--warn-soft);color:var(--warn)}
+  .chip.complete{background:var(--good-soft);color:var(--good)}
+  .p-bar{display:flex;flex-direction:column;gap:5px;min-width:120px}
+  .bar{
+    height:8px;border-radius:4px;background:var(--track);overflow:hidden;position:relative;
+  }
+  .bar .fill{
+    height:100%;border-radius:4px;background:var(--accent);
+    transition:width .3s ease;min-width:0;
+  }
+  .part.done .bar .fill{background:var(--good)}
+  .p-bar .meta{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-2)}
+  .p-count{text-align:right}
+  .p-count .c{font-family:"Spline Sans Mono",monospace;font-weight:600;font-size:19px;font-variant-numeric:tabular-nums}
+  .p-count .c .den{color:var(--ink-3);font-size:13px;font-weight:500}
+  .p-count .scrap{font-size:11.5px;color:var(--warn);margin-top:1px;white-space:nowrap}
+  .p-count .scrap:empty{display:none}
+  .p-ctl{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+  button.step{
+    font-family:"Spline Sans Mono",monospace;font-weight:600;font-size:13px;
+    background:var(--card2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:6px 11px;cursor:pointer;line-height:1;
+    transition:background .15s,border-color .15s;
+  }
+  button.step:hover{border-color:var(--accent);background:var(--accent-soft)}
+  button.step.minus,button.step.fail{color:var(--ink-2)}
+  button.step.fail:hover{border-color:var(--warn);background:var(--warn-soft);color:var(--warn)}
+  button.step:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.step:disabled{opacity:.35;cursor:default;pointer-events:none}
+  input.amt{
+    width:58px;font-family:"Spline Sans Mono",monospace;font-weight:600;font-size:13px;
+    background:var(--card2);color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:5px 8px;line-height:1;text-align:right;
+  }
+  input.amt::placeholder{color:var(--ink-3)}
+  input.amt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  body.readonly button.step,body.readonly input.amt{display:none}
+
+  /* ---------- filament ---------- */
+  .fil-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+  .fil{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;box-shadow:var(--shadow);
+  }
+  .fil .n{font-size:12.5px;font-weight:600;margin-bottom:6px}
+  .fil .bar{height:6px;margin-bottom:6px}
+  .fil .bar .fill{background:var(--accent)}
+  .fil.ok .bar .fill{background:var(--good)}
+  .fil .d{font-size:11.5px;color:var(--ink-2)}
+  .fil .d b{color:var(--ink);font-weight:600;font-family:"Spline Sans Mono",monospace;font-variant-numeric:tabular-nums}
+
+  footer.note{
+    border-top:1px solid var(--line);padding-top:14px;
+    font-size:12px;color:var(--ink-3);line-height:1.6;max-width:64ch;
+  }
+
+  @media (max-width:760px){
+    .hero{grid-template-columns:1fr;gap:20px}
+    .unit-grid{justify-self:start;max-width:100%}
+    .tiles{grid-template-columns:repeat(2,1fr)}
+    .part{grid-template-columns:1fr auto;grid-template-areas:"id count" "bar bar" "ctl ctl"}
+    .p-id{grid-area:id}.p-count{grid-area:count}.p-bar{grid-area:bar}
+    .p-ctl{grid-area:ctl;justify-content:flex-start}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition:none!important}
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>GN Headset Run</h1>
+      <p class="sub">30-unit build &middot; 3&times;&nbsp;P1S + 2&times;&nbsp;A1 &middot; 510 pieces</p>
+    </div>
+    <span id="save-chip">Synced</span>
+  </header>
+
+  <section class="hero" aria-label="Headsets complete">
+    <div class="hero-count">
+      <span class="label">Headsets complete</span>
+      <div class="big"><span id="hero-n">0</span><span class="den">&thinsp;/&thinsp;30</span></div>
+      <div class="pace" id="hero-pace"></div>
+    </div>
+    <div class="unit-grid" id="unit-grid" role="img" aria-label="Build grid, one cell per headset"></div>
+  </section>
+
+  <section class="tiles" aria-label="Run stats">
+    <div class="tile"><div class="k">Pieces printed</div><div class="v" id="t-pieces">0<small> / 510</small></div><div class="s">good parts, all types</div></div>
+    <div class="tile"><div class="k">Print time to go</div><div class="v" id="t-hours">0 h</div><div class="s">incl. 10% failure buffer</div></div>
+    <div class="tile"><div class="k">Fleet days left</div><div class="v" id="t-days">0</div><div class="s">at 5 printers &times; 16 h/day</div></div>
+    <div class="tile"><div class="k">Scrapped prints</div><div class="v" id="t-scrap">0</div><div class="s" id="t-scrap-s">no failures logged</div></div>
+  </section>
+
+  <section aria-label="Parts">
+    <h2>Parts</h2>
+    <div class="part-list" id="part-list"></div>
+  </section>
+
+  <section aria-label="Filament">
+    <h2>Filament to go</h2>
+    <div class="fil-grid" id="fil-grid"></div>
+  </section>
+
+  <footer class="note">
+    Times and weights come from the Aug&nbsp;2026 build plan: frame weights include ~50% support/raft
+    overhead, and every &ldquo;to go&rdquo; figure carries the 10% failure buffer. A headset counts as
+    complete when every part for it is printed &mdash; 4 siliconces, outer + inner frame, 2 sponges,
+    4 snaps, 2 conductive + 2 PLA sliders, 1 stopper. Log failed prints with the <b>fail</b> button
+    so scrap shows up in the totals. Type any amount in the box and hit <b>add</b> (or Enter) to log
+    a batch; an empty box adds one typical plate &mdash; that's the greyed number.
+  </footer>
+</div>
+
+<script type="application/json" id="app-state">{"v":1,"updated":0,"counts":{"sil":0,"outer":0,"inner":0,"sponge":0,"snap":0,"slider":0,"stopper":0},"scrap":{"sil":0,"outer":0,"inner":0,"sponge":0,"snap":0,"slider":0,"stopper":0}}</script>
+
+<script>
+(function(){
+  "use strict";
+  var PRISTINE_FALLBACK = "<!doctype html>\n" + document.documentElement.outerHTML;
+
+  var GOAL = 30;
+  var BUFFER = 1.1;
+  var FLEET_H_PER_DAY = 80; /* 5 printers x 16 h */
+
+  var PARTS = [
+    {id:"sil",      name:"Siliconce",           mat:"Overture 95A TPU",      matKey:"ov_tpu", qty:4, hrs:2.0,   g:18,    plate:4,  sup:false},
+    {id:"outer",    name:"Outer frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:7.167, g:156.6, plate:1,  sup:true},
+    {id:"inner",    name:"Inner frame",         mat:"Bambu Galaxy PLA",      matKey:"galaxy", qty:1, hrs:6.0,   g:145.5, plate:1,  sup:true},
+    {id:"sponge",   name:"Dummy sponge",        mat:"Siraya TPU",            matKey:"siraya", qty:2, hrs:0.75,  g:5,     plate:2,  sup:false},
+    {id:"snap",     name:"Snap",                mat:"Bambu PLA",             matKey:"bambu",  qty:4, hrs:0.183, g:2,     plate:4,  sup:false},
+    {id:"slider_c", name:"Slider (conductive)", mat:"Protopasta conductive", matKey:"cond",   qty:2, hrs:0.367, g:5.4,   plate:12, sup:false},
+    {id:"slider_p", name:"Slider (PLA)",        mat:"Bambu PLA",             matKey:"bambu",  qty:2, hrs:0.367, g:5.4,   plate:12, sup:false},
+    {id:"stopper",  name:"PCB stopper",         mat:"Bambu PLA",             matKey:"bambu",  qty:1, hrs:0.2,   g:7,     plate:1,  sup:false}
+  ];
+  var MATERIALS = [
+    {key:"galaxy", name:"Bambu Galaxy PLA",     bought:14},
+    {key:"ov_tpu", name:"Overture 95A TPU",     bought:3},
+    {key:"cond",   name:"Conductive PLA",       bought:1.25},
+    {key:"siraya", name:"Siraya TPU",           bought:1},
+    {key:"bambu",  name:"Bambu PLA Basic",      bought:1}
+  ];
+
+  var LS_KEY = "gn-headset-run-v1";
+  var state = readState();
+  var artifactNS = null;
+  var mode = "boot"; /* synced | saving | local | ro */
+  var saveTimer = null;
+
+  function readState(){
+    var el = document.getElementById("app-state");
+    try { return JSON.parse(el.textContent); }
+    catch(e){ return {v:1,updated:0,counts:{},scrap:{}}; }
+  }
+  /* migrate pre-split slider counts (was one part, now conductive + PLA) */
+  ["counts","scrap"].forEach(function(k){
+    var o = state[k] || {};
+    if (typeof o.slider === "number" && typeof o.slider_c !== "number"){
+      o.slider_c = Math.ceil(o.slider / 2);
+      o.slider_p = Math.floor(o.slider / 2);
+    }
+    delete o.slider;
+  });
+  PARTS.forEach(function(p){
+    if (typeof state.counts[p.id] !== "number") state.counts[p.id] = 0;
+    if (typeof state.scrap[p.id]  !== "number") state.scrap[p.id]  = 0;
+  });
+
+  /* ---------- derived ---------- */
+  function headsetsDone(){
+    return Math.min.apply(null, PARTS.map(function(p){
+      return Math.floor(state.counts[p.id] / p.qty);
+    }).concat([GOAL]));
+  }
+  function nextUnitFrac(done){
+    if (done >= GOAL) return 0;
+    return Math.min.apply(null, PARTS.map(function(p){
+      var f = state.counts[p.id] / p.qty - done;
+      return Math.max(0, Math.min(1, f));
+    }));
+  }
+  function hoursToGo(){
+    return PARTS.reduce(function(s,p){
+      return s + Math.max(0, p.qty * GOAL - state.counts[p.id]) * p.hrs * BUFFER;
+    }, 0);
+  }
+
+  /* ---------- render ---------- */
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+  function fmtH(h){ return Math.round(h) + " h"; }
+
+  function render(){
+    var done = headsetsDone();
+    var frac = nextUnitFrac(done);
+    var pieces = PARTS.reduce(function(s,p){ return s + state.counts[p.id]; }, 0);
+    var scrapTotal = PARTS.reduce(function(s,p){ return s + state.scrap[p.id]; }, 0);
+    var hrs = hoursToGo();
+
+    document.getElementById("hero-n").textContent = done;
+    document.getElementById("hero-pace").textContent =
+      done >= GOAL ? "Run complete. Ship them." :
+      pieces === 0 ? "Log your first prints below to get moving." :
+      (GOAL - done) + " to go · ~" + (hrs / FLEET_H_PER_DAY).toFixed(1) + " fleet-days of printing left";
+
+    var grid = "";
+    for (var i = 0; i < GOAL; i++){
+      if (i < done) grid += '<div class="unit done"><div class="fill"></div></div>';
+      else if (i === done && frac > 0) grid += '<div class="unit"><div class="fill" style="height:' + Math.round(frac*100) + '%"></div></div>';
+      else grid += '<div class="unit"><div class="fill"></div></div>';
+    }
+    document.getElementById("unit-grid").innerHTML = grid;
+
+    document.getElementById("t-pieces").innerHTML = pieces + "<small> / 510</small>";
+    document.getElementById("t-hours").textContent = fmtH(hrs);
+    document.getElementById("t-days").textContent = (hrs / FLEET_H_PER_DAY).toFixed(1);
+    document.getElementById("t-scrap").textContent = scrapTotal;
+    document.getElementById("t-scrap-s").textContent =
+      scrapTotal === 0 ? "no failures logged" :
+      "~" + fmtH(PARTS.reduce(function(s,p){ return s + state.scrap[p.id]*p.hrs; },0)) + " lost to failures";
+
+    /* parts */
+    var minRatio = Math.min.apply(null, PARTS.map(function(p){ return Math.floor(state.counts[p.id]/p.qty); }));
+    var html = PARTS.map(function(p){
+      var total = p.qty * GOAL;
+      var c = state.counts[p.id];
+      var pct = Math.min(100, c/total*100);
+      var isDone = c >= total;
+      var isBn = !isDone && pieces > 0 && Math.floor(c/p.qty) === minRatio && minRatio < GOAL;
+      var remH = Math.max(0, total - c) * p.hrs * BUFFER;
+      var chip = isDone ? '<span class="chip complete">done</span>'
+               : isBn   ? '<span class="chip bottleneck">bottleneck</span>' : "";
+      var scrap = state.scrap[p.id] > 0
+        ? state.scrap[p.id] + ' scrapped <button class="step fail" data-act="unfail" data-id="' + p.id + '" aria-label="Remove a logged failure for ' + esc(p.name) + '">&minus;</button>'
+        : "";
+      var gLabel = p.g + " g" + (p.sup ? " w/ supports" : "");
+      return '<div class="part' + (isDone ? " done" : "") + '">' +
+        '<div class="p-id"><div class="name">' + esc(p.name) + chip + '</div><div class="mat">' + esc(p.mat) + ' · ' + p.qty + '/headset · ' + gLabel + '</div></div>' +
+        '<div class="p-bar"><div class="bar"><div class="fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="meta"><span>' + Math.round(pct) + '%</span><span class="num">' + (isDone ? "batch complete" : fmtH(remH) + " to go") + '</span></div></div>' +
+        '<div class="p-count"><div class="c">' + c + '<span class="den">/' + total + '</span></div><div class="scrap num">' + scrap + '</div></div>' +
+        '<div class="p-ctl">' +
+          '<button class="step minus" data-act="dec" data-id="' + p.id + '" aria-label="Remove one ' + esc(p.name) + '"' + (c===0?" disabled":"") + '>&minus;1</button>' +
+          '<button class="step" data-act="inc" data-id="' + p.id + '">+1</button>' +
+          '<input class="amt" type="number" inputmode="numeric" step="1" data-amt-for="' + p.id + '" placeholder="' + p.plate + '" aria-label="Amount of ' + esc(p.name) + ' to add">' +
+          '<button class="step" data-act="add" data-id="' + p.id + '" title="Add the typed amount (empty = ' + p.plate + ')">add</button>' +
+          '<button class="step fail" data-act="fail" data-id="' + p.id + '" title="Log a failed print">fail</button>' +
+        '</div></div>';
+    }).join("");
+    document.getElementById("part-list").innerHTML = html;
+
+    /* filament */
+    var need0 = {}, needNow = {};
+    PARTS.forEach(function(p){
+      var t0 = p.qty * GOAL * p.g * BUFFER / 1000;
+      var tn = Math.max(0, p.qty * GOAL - state.counts[p.id]) * p.g * BUFFER / 1000;
+      need0[p.matKey]   = (need0[p.matKey]   || 0) + t0;
+      needNow[p.matKey] = (needNow[p.matKey] || 0) + tn;
+    });
+    document.getElementById("fil-grid").innerHTML = MATERIALS.map(function(m){
+      var togo = needNow[m.key] || 0;
+      var pct = need0[m.key] ? (1 - togo/need0[m.key]) * 100 : 100;
+      var doneM = togo < 0.005;
+      return '<div class="fil' + (doneM ? " ok" : "") + '"><div class="n">' + esc(m.name) + '</div>' +
+        '<div class="bar"><div class="fill" style="width:' + Math.round(pct) + '%"></div></div>' +
+        '<div class="d"><b>' + togo.toFixed(2) + ' kg</b> to go · ' + m.bought + ' kg on hand</div></div>';
+    }).join("");
+  }
+
+  /* ---------- persistence ---------- */
+  var STANDALONE = !(window.claude && typeof window.claude.use === "function");
+
+  function setChip(m){
+    mode = m;
+    var chip = document.getElementById("save-chip");
+    chip.className = "";
+    if (m === "saving"){ chip.classList.add("saving"); chip.textContent = "Saving…"; }
+    else if (m === "local"){
+      /* on a plain web host this is the normal mode, not a warning */
+      if (STANDALONE){ chip.textContent = "Saved in this browser"; }
+      else { chip.classList.add("local"); chip.textContent = "Saved on this device only"; }
+    }
+    else if (m === "ro"){ chip.classList.add("ro"); chip.textContent = "View only"; document.body.classList.add("readonly"); }
+    else { chip.textContent = "Synced"; }
+  }
+
+  function stateJSON(){
+    return JSON.stringify(state).replace(/</g, "\\u003c");
+  }
+
+  function buildDocument(src){
+    return src.replace(
+      /(<script type="application\/json" id="app-state">)[\s\S]*?(<\/script>)/,
+      function(_, a, b){ return a + stateJSON() + b; }
+    );
+  }
+
+  function scheduleSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 2000);
+  }
+
+  function save(){
+    state.updated = Date.now();
+    try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch(e){}
+    if (!artifactNS){ setChip("local"); return; }
+    setChip("saving");
+    fetch(location.href, {cache:"no-store"})
+      .then(function(r){ return r.ok ? r.text() : Promise.reject(new Error("fetch " + r.status)); })
+      .catch(function(){ return PRISTINE_FALLBACK; })
+      .then(function(src){ return artifactNS.publish(buildDocument(src)); })
+      .then(function(){ setChip("synced"); /* view reloads to the new version */ })
+      .catch(function(err){
+        var code = err && err.code;
+        if (code === "conflict"){ return; } /* shell reloads us to the winner */
+        if (code === "not_writer" || code === "not_granted" || code === "consent_required" ||
+            code === "capability_disabled" || code === "capability_removed" || code === "not_declared"){
+          setChip("ro"); return;
+        }
+        setChip("local"); /* kept in localStorage; will retry on next change */
+      });
+  }
+
+  /* ---------- events ---------- */
+  document.addEventListener("click", function(ev){
+    var btn = ev.target.closest("button.step");
+    if (!btn || mode === "ro") return;
+    var p = PARTS.find(function(x){ return x.id === btn.dataset.id; });
+    if (!p) return;
+    var act = btn.dataset.act;
+    if (act === "inc") state.counts[p.id]++;
+    else if (act === "add"){
+      var inp = document.querySelector('input.amt[data-amt-for="' + p.id + '"]');
+      var n = inp ? parseInt(inp.value, 10) : NaN;
+      if (isNaN(n)) n = p.plate; /* empty box = one typical plate */
+      state.counts[p.id] = Math.max(0, state.counts[p.id] + n);
+    }
+    else if (act === "dec") state.counts[p.id] = Math.max(0, state.counts[p.id] - 1);
+    else if (act === "fail") state.scrap[p.id]++;
+    else if (act === "unfail") state.scrap[p.id] = Math.max(0, state.scrap[p.id] - 1);
+    render();
+    scheduleSave();
+  });
+
+  document.addEventListener("keydown", function(ev){
+    if (ev.key !== "Enter") return;
+    var inp = ev.target;
+    if (!inp.matches || !inp.matches("input.amt")) return;
+    var btn = document.querySelector('button[data-act="add"][data-id="' + inp.dataset.amtFor + '"]');
+    if (btn) btn.click();
+  });
+
+  /* ---------- boot ---------- */
+  function adoptLocalIfNewer(){
+    try {
+      var local = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+      if (local && local.updated > (state.updated || 0)){ state = local; render(); }
+    } catch(e){}
+  }
+
+  render();
+  if (!STANDALONE){
+    window.claude.use("artifact").then(function(ns){
+      artifactNS = ns;
+      if (ns){ setChip("synced"); }
+      else { adoptLocalIfNewer(); setChip("local"); }
+    });
+  } else {
+    adoptLocalIfNewer();
+    setChip("local");
+  }
+})();
+</script>
+
+</body></html>
